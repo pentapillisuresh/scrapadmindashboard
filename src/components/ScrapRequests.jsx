@@ -70,18 +70,19 @@ const ScrapRequests = () => {
   };
 
   // Fetch request details
-  const fetchRequestDetails = async (id) => {
+  const fetchRequestDetails = async (request) => {
+
     setLoading(true);
     setError(null);
     try {
-      const response = await adminService.getRequestDetails(id);
+      // const response = await adminService.getRequestDetails(id);
       
-      if (response && response.success) {
-        setSelectedRequest(response.data || response);
+      // if (response && response.success) {
+        setSelectedRequest(request);
         setViewMode('details');
-      } else {
-        setError(response?.message || 'Failed to fetch request details');
-      }
+      // } else {
+      //   setError(response?.message || 'Failed to fetch request details');
+      // }
     } catch (err) {
       setError(err.message || err.response?.data?.message || 'Failed to fetch request details');
       console.error('Fetch request details error:', err);
@@ -468,7 +469,7 @@ const ScrapRequests = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                         <button
-                          onClick={() => fetchRequestDetails(request.id)}
+                          onClick={() => fetchRequestDetails(request)}
                           className="text-[#017B83] hover:text-teal-700"
                           disabled={loading}
                         >
@@ -861,7 +862,10 @@ const ScrapRequests = () => {
                             <div className="mt-4">
                               <p className="text-sm font-medium text-gray-900 mb-2">Uploaded Photos:</p>
                               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                {item.RequestImages.map((image, imageIdx) => (
+                                {item.RequestImages.map((image, imageIdx) => 
+                                {
+                                  console.log("images:::",`http://localhost:5001${image.image_url}`)
+                                  return(
                                   <div key={imageIdx} className="aspect-square rounded-lg overflow-hidden border border-gray-200 relative">
                                     <img
                                       src={`http://localhost:5001${image.image_url}`}
@@ -878,7 +882,7 @@ const ScrapRequests = () => {
                                       </span>
                                     )}
                                   </div>
-                                ))}
+                                )})}
                               </div>
                             </div>
                           )}
