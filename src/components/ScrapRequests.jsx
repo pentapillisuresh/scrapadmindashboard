@@ -1,180 +1,285 @@
-// components/ScrapRequests.jsx
-import React, { useState } from 'react';
-
-// Dummy requests data
-const initialRequests = [
-  {
-    id: 'SCRP001',
-    userId: 'USR001',
-    userName: 'John Doe',
-    userEmail: 'john@example.com',
-    userPhone: '+1 234 567 8900',
-    address: '123 Main St, New York, NY 10001',
-    coordinates: { lat: 40.7128, lng: -74.0060 },
-    categories: [
-      { id: 1, name: 'Metal', photos: ['photo1.jpg', 'photo2.jpg'], weight: '5.2 kg' },
-      { id: 5, name: 'Electronics', photos: ['photo3.jpg'], weight: '3.8 kg' }
-    ],
-    status: 'estimated',
-    totalWeight: '9.0 kg',
-    submittedAt: '2024-01-15 10:30:00',
-    estimatedAt: '2024-01-15 14:45:00',
-    completedAt: null
-  },
-  {
-    id: 'SCRP002',
-    userId: 'USR002',
-    userName: 'Jane Smith',
-    userEmail: 'jane@example.com',
-    userPhone: '+1 234 567 8901',
-    address: '456 Oak Ave, Los Angeles, CA 90001',
-    coordinates: { lat: 34.0522, lng: -118.2437 },
-    categories: [
-      { id: 2, name: 'Plastic', photos: ['photo4.jpg'], weight: '2.5 kg' },
-      { id: 3, name: 'Paper', photos: ['photo5.jpg', 'photo6.jpg'], weight: '4.3 kg' }
-    ],
-    status: 'submitted',
-    totalWeight: '6.8 kg',
-    submittedAt: '2024-01-15 11:15:00',
-    estimatedAt: null,
-    completedAt: null
-  },
-  {
-    id: 'SCRP003',
-    userId: 'USR003',
-    userName: 'Bob Wilson',
-    userEmail: 'bob@example.com',
-    userPhone: '+1 234 567 8902',
-    address: '789 Pine Rd, Chicago, IL 60601',
-    coordinates: { lat: 41.8781, lng: -87.6298 },
-    categories: [
-      { id: 1, name: 'Metal', photos: ['photo7.jpg'], weight: '7.1 kg' },
-      { id: 6, name: 'Wood', photos: ['photo8.jpg'], weight: '3.2 kg' }
-    ],
-    status: 'completed',
-    totalWeight: '10.3 kg',
-    submittedAt: '2024-01-14 09:45:00',
-    estimatedAt: '2024-01-14 13:20:00',
-    completedAt: '2024-01-15 10:15:00'
-  },
-  {
-    id: 'SCRP004',
-    userId: 'USR004',
-    userName: 'Alice Brown',
-    userEmail: 'alice@example.com',
-    userPhone: '+1 234 567 8903',
-    address: '321 Elm St, Houston, TX 77001',
-    coordinates: { lat: 29.7604, lng: -95.3698 },
-    categories: [
-      { id: 4, name: 'Glass', photos: ['photo9.jpg', 'photo10.jpg', 'photo11.jpg'], weight: '8.7 kg' }
-    ],
-    status: 'submitted',
-    totalWeight: '8.7 kg',
-    submittedAt: '2024-01-15 08:20:00',
-    estimatedAt: null,
-    completedAt: null
-  },
-  {
-    id: 'SCRP005',
-    userId: 'USR005',
-    userName: 'Charlie Davis',
-    userEmail: 'charlie@example.com',
-    userPhone: '+1 234 567 8904',
-    address: '654 Maple Dr, Phoenix, AZ 85001',
-    coordinates: { lat: 33.4484, lng: -112.0740 },
-    categories: [
-      { id: 5, name: 'Electronics', photos: ['photo12.jpg'], weight: '15.2 kg' }
-    ],
-    status: 'estimated',
-    totalWeight: '15.2 kg',
-    submittedAt: '2024-01-14 16:45:00',
-    estimatedAt: '2024-01-15 09:30:00',
-    completedAt: null
-  }
-];
+import React, { useState, useEffect } from 'react';
+import { adminService } from '../services/api';
 
 const ScrapRequests = () => {
-  const [requests, setRequests] = useState(initialRequests);
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const [viewMode, setViewMode] = useState('list'); // 'list' or 'details'
-  const [filter, setFilter] = useState('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [editingWeights, setEditingWeights] = useState({});
-
-  const filteredRequests = requests.filter(request => {
-    if (filter !== 'all' && request.status !== filter) return false;
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      return (
-        request.id.toLowerCase().includes(term) ||
-        request.userName.toLowerCase().includes(term) ||
-        request.userEmail.toLowerCase().includes(term) ||
-        request.address.toLowerCase().includes(term)
-      );
-    }
-    return true;
+  const [viewMode, setViewMode] = useState('list');
+  const [filters, setFilters] = useState({
+    status: 'all',
+    search: '',
+    startDate: '',
+    endDate: ''
   });
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1
+  });
+  const [editingWeights, setEditingWeights] = useState({});
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [userData, setUserData] = useState(null);
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'submitted': return 'bg-yellow-100 text-yellow-800';
-      case 'estimated': return 'bg-purple-100 text-purple-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
+  // Fetch user data from localStorage on mount
+  useEffect(() => {
+    const storedUserData = localStorage.getItem('userData');
+    if (storedUserData) {
+      setUserData(JSON.parse(storedUserData));
+    }
+  }, []);
+
+  // Fetch requests
+  const fetchRequests = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = {
+        page: pagination.page,
+        limit: pagination.limit,
+        ...(filters.status !== 'all' && { status: filters.status }),
+        ...(filters.search && { search: filters.search }),
+        ...(filters.startDate && { start_date: filters.startDate }),
+        ...(filters.endDate && { end_date: filters.endDate })
+      };
+
+      const response = await adminService.getAllRequests(params);
+      
+      // Handle the API response structure
+      if (response && response.success) {
+        const data = response.data || response;
+        setRequests(data.requests || []);
+        setPagination({
+          page: data.pagination?.page || pagination.page,
+          limit: data.pagination?.limit || pagination.limit,
+          total: data.pagination?.total || data.requests?.length || 0,
+          totalPages: data.pagination?.totalPages || 
+                     Math.ceil((data.pagination?.total || data.requests?.length || 0) / (data.pagination?.limit || pagination.limit))
+        });
+      } else {
+        setError(response?.message || 'Failed to fetch requests');
+      }
+    } catch (err) {
+      setError(err.message || err.response?.data?.message || 'Failed to fetch requests');
+      console.error('Fetch requests error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleStatusUpdate = (requestId, newStatus) => {
-    const updatedRequests = requests.map(request => {
-      if (request.id === requestId) {
-        const update = { status: newStatus };
-        if (newStatus === 'estimated') {
-          update.estimatedAt = new Date().toLocaleString();
-        } else if (newStatus === 'completed') {
-          update.completedAt = new Date().toLocaleString();
+  // Fetch request details
+  const fetchRequestDetails = async (id) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await adminService.getRequestDetails(id);
+      
+      if (response && response.success) {
+        setSelectedRequest(response.data || response);
+        setViewMode('details');
+      } else {
+        setError(response?.message || 'Failed to fetch request details');
+      }
+    } catch (err) {
+      setError(err.message || err.response?.data?.message || 'Failed to fetch request details');
+      console.error('Fetch request details error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update request status
+  const updateRequestStatus = async (requestId, status, notes = '') => {
+    setUpdateLoading(true);
+    setError(null);
+    try {
+      const response = await adminService.updateRequestStatus(requestId, {
+        status,
+        admin_notes: notes
+      });
+      
+      if (response && response.success) {
+        const updatedRequest = response.data || response;
+        
+        // Update local state
+        setRequests(prev => prev.map(req => 
+          req.id === requestId ? updatedRequest : req
+        ));
+        
+        if (selectedRequest?.id === requestId) {
+          setSelectedRequest(updatedRequest);
         }
-        return { ...request, ...update };
-      }
-      return request;
-    });
-    setRequests(updatedRequests);
-  };
-
-  const handleWeightUpdate = (requestId, categoryId, weight) => {
-    const updatedRequests = requests.map(request => {
-      if (request.id === requestId) {
-        const updatedCategories = request.categories.map(cat => 
-          cat.id === categoryId ? { ...cat, weight: weight } : cat
-        );
         
-        // Calculate new total weight
-        const totalWeight = updatedCategories.reduce((sum, cat) => {
-          const weightValue = parseFloat(cat.weight) || 0;
-          return sum + weightValue;
-        }, 0);
-        
-        return {
-          ...request,
-          categories: updatedCategories,
-          totalWeight: `${totalWeight.toFixed(1)} kg`
-        };
+        alert(`Request ${status} successfully`);
+        return true;
+      } else {
+        setError(response?.message || 'Failed to update status');
+        return false;
       }
-      return request;
+    } catch (err) {
+      setError(err.message || err.response?.data?.message || 'Failed to update status');
+      console.error('Update status error:', err);
+      return false;
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
+  // Update item weights
+  const updateItemWeights = async () => {
+    if (!selectedRequest) return;
+
+    setUpdateLoading(true);
+    setError(null);
+    try {
+      const items = selectedRequest.RequestItems.map(item => ({
+        id: item.id,
+        weight: editingWeights[item.id]?.weight || item.weight,
+        estimated_value: editingWeights[item.id]?.estimated_value || item.estimated_value,
+        admin_notes: editingWeights[item.id]?.admin_notes || item.admin_notes
+      }));
+
+      const response = await adminService.updateItemWeights(selectedRequest.id, { items });
+      
+      if (response && response.success) {
+        const updatedRequest = response.data || response;
+        setSelectedRequest(updatedRequest);
+        setEditingWeights({});
+        alert('Item weights updated successfully');
+      } else {
+        setError(response?.message || 'Failed to update weights');
+      }
+    } catch (err) {
+      setError(err.message || err.response?.data?.message || 'Failed to update weights');
+      console.error('Update weights error:', err);
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
+  // Handle filter change
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setPagination(prev => ({ ...prev, page: 1 }));
+  };
+
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setPagination(prev => ({ ...prev, page: newPage }));
+  };
+
+  // Handle weight change
+  const handleWeightChange = (itemId, field, value) => {
+    setEditingWeights(prev => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        [field]: value
+      }
+    }));
+  };
+
+  // Calculate total weight and value
+  const calculateTotals = () => {
+    if (!selectedRequest?.RequestItems) return { weight: 0, value: 0 };
+
+    const totals = selectedRequest.RequestItems.reduce((acc, item) => {
+      const weight = editingWeights[item.id]?.weight || item.weight || 0;
+      const value = editingWeights[item.id]?.estimated_value || item.estimated_value || 0;
+      
+      acc.weight += parseFloat(weight) || 0;
+      acc.value += parseFloat(value) || 0;
+      
+      return acc;
+    }, { weight: 0, value: 0 });
+
+    return totals;
+  };
+
+  // Get status color
+  const getStatusColor = (status) => {
+    const colors = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      accepted: 'bg-blue-100 text-blue-800',
+      scheduled: 'bg-purple-100 text-purple-800',
+      in_progress: 'bg-indigo-100 text-indigo-800',
+      completed: 'bg-green-100 text-green-800',
+      cancelled: 'bg-red-100 text-red-800',
+      rejected: 'bg-gray-100 text-gray-800'
+    };
+    return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  // Format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Not set';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Format status for display
+  const formatStatus = (status) => {
+    const statusMap = {
+      'pending': 'Pending',
+      'accepted': 'Accepted',
+      'scheduled': 'Scheduled',
+      'in_progress': 'In Progress',
+      'completed': 'Completed',
+      'cancelled': 'Cancelled',
+      'rejected': 'Rejected'
+    };
+    return statusMap[status] || (status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown');
+  };
+
+  // Fetch requests on mount and when filters/pagination change
+  useEffect(() => {
+    fetchRequests();
+  }, [filters.status, pagination.page]);
+
+  // Reset filters
+  const resetFilters = () => {
+    setFilters({
+      status: 'all',
+      search: '',
+      startDate: '',
+      endDate: ''
     });
-    
-    setRequests(updatedRequests);
   };
 
-  const handleViewDetails = (request) => {
-    setSelectedRequest(request);
-    setViewMode('details');
+  // Apply filters
+  const applyFilters = () => {
+    setPagination(prev => ({ ...prev, page: 1 }));
+    fetchRequests();
   };
 
-  const handleCloseDetails = () => {
-    setViewMode('list');
-    setSelectedRequest(null);
-    setEditingWeights({});
+  // Handle search input key press
+  const handleSearchKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      applyFilters();
+    }
   };
+
+  if (loading && viewMode === 'list' && requests.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#017B83] mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading requests...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -187,12 +292,14 @@ const ScrapRequests = () => {
               <p className="text-gray-600">Manage and review scrap collection requests</p>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Search */}
               <div className="relative">
                 <input
                   type="text"
                   placeholder="Search requests..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  value={filters.search}
+                  onChange={(e) => handleFilterChange('search', e.target.value)}
+                  onKeyPress={handleSearchKeyPress}
                   className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#017B83] focus:border-transparent"
                 />
                 <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -202,18 +309,80 @@ const ScrapRequests = () => {
             </div>
           </div>
 
-          {/* Filter Tabs */}
-          <div className="flex space-x-2 border-b border-gray-200">
-            {['all', 'submitted', 'estimated', 'completed'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilter(status)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${filter === status ? 'border-[#017B83] text-[#017B83]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)} Requests
-              </button>
-            ))}
+          {/* Filters */}
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+            <div className="flex flex-wrap gap-4 items-end">
+              {/* Status Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  value={filters.status}
+                  onChange={(e) => handleFilterChange('status', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#017B83] focus:border-transparent"
+                >
+                  <option value="all">All Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+
+              {/* Date Range Filters */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  value={filters.startDate}
+                  onChange={(e) => handleFilterChange('startDate', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#017B83] focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <input
+                  type="date"
+                  value={filters.endDate}
+                  onChange={(e) => handleFilterChange('endDate', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#017B83] focus:border-transparent"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-2">
+                <button
+                  onClick={applyFilters}
+                  disabled={loading}
+                  className="px-4 py-2 bg-[#017B83] text-white rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Loading...' : 'Apply Filters'}
+                </button>
+                <button
+                  onClick={resetFilters}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
           </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex justify-between items-center">
+              <span>{error}</span>
+              <button 
+                onClick={() => setError(null)}
+                className="text-red-700 hover:text-red-900 font-bold text-lg"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           {/* Requests Table */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -222,22 +391,25 @@ const ScrapRequests = () => {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Request ID
+                      Request Number
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      User Details
+                      User ID
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Categories
+                      Address
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Weight
+                      Items
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Weight/Value
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Submitted
+                      Created
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -245,84 +417,135 @@ const ScrapRequests = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredRequests.map((request) => (
+                  {requests.map((request) => (
                     <tr key={request.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{request.id}</div>
-                        <div className="text-sm text-gray-500">{request.address.split(',')[0]}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {request.request_number}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{request.userName}</div>
-                        <div className="text-sm text-gray-500">{request.userEmail}</div>
-                        <div className="text-sm text-gray-500">{request.userPhone}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          User ID: {request.user_id}
+                        </div>
+                        <div className="text-sm text-gray-500">Address ID: {request.address_id}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">
+                          {request.UserAddress?.address_line1 || 'No address'}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {request.UserAddress?.city || ''}, {request.UserAddress?.state || ''}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
-                          {request.categories.map((cat, idx) => (
+                          {request.RequestItems?.map((item, idx) => (
                             <span
                               key={idx}
                               className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
                             >
-                              {cat.name}
+                              {item.Category?.name || 'Item'} ({item.quantity})
                             </span>
-                          ))}
-                        </div>
-                        <div className="text-sm text-gray-500 mt-1">
-                          {request.categories.length} category(s)
+                          )) || <span className="text-gray-500">No items</span>}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{request.totalWeight}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {request.total_weight || '0'} kg
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          ₹{request.total_estimated_value || '0'}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
-                          {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                          {formatStatus(request.status)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {new Date(request.submittedAt).toLocaleDateString()}
+                        {formatDate(request.createdAt || request.created_at)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                         <button
-                          onClick={() => handleViewDetails(request)}
-                          className="text-[#017B83] hover:text-teal-700 mr-3"
+                          onClick={() => fetchRequestDetails(request.id)}
+                          className="text-[#017B83] hover:text-teal-700"
+                          disabled={loading}
                         >
                           View Details
                         </button>
-                        {request.status === 'submitted' && (
-                          <button
-                            onClick={() => handleStatusUpdate(request.id, 'estimated')}
-                            className="text-purple-600 hover:text-purple-900"
-                          >
-                            Mark Estimated
-                          </button>
-                        )}
-                        {request.status === 'estimated' && (
-                          <button
-                            onClick={() => handleStatusUpdate(request.id, 'completed')}
-                            className="text-green-600 hover:text-green-900"
-                          >
-                            Mark Completed
-                          </button>
-                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {/* No Results */}
+            {requests.length === 0 && !loading && (
+              <div className="text-center py-12">
+                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h3 className="mt-2 text-sm font-medium text-gray-900">No requests found</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {filters.search || filters.status !== 'all' ? 'Try adjusting your filters' : 'No scrap requests have been submitted yet'}
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* No Results */}
-          {filteredRequests.length === 0 && (
-            <div className="text-center py-12">
-              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No requests found</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                {searchTerm ? 'Try a different search term' : 'No requests match the selected filter'}
-              </p>
+          {/* Pagination */}
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white px-4 py-3 border-t border-gray-200 rounded-b-xl">
+              <div className="text-sm text-gray-700">
+                Showing <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> to{' '}
+                <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> of{' '}
+                <span className="font-medium">{pagination.total}</span> results
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => handlePageChange(pagination.page - 1)}
+                  disabled={pagination.page === 1 || loading}
+                  className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Previous
+                </button>
+                {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (pagination.totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (pagination.page <= 3) {
+                    pageNum = i + 1;
+                  } else if (pagination.page >= pagination.totalPages - 2) {
+                    pageNum = pagination.totalPages - 4 + i;
+                  } else {
+                    pageNum = pagination.page - 2 + i;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      disabled={loading}
+                      className={`px-3 py-1 border rounded text-sm ${
+                        pagination.page === pageNum
+                          ? 'bg-[#017B83] text-white border-[#017B83]'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => handlePageChange(pagination.page + 1)}
+                  disabled={pagination.page === pagination.totalPages || loading}
+                  className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </>
@@ -334,76 +557,115 @@ const ScrapRequests = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
                   <button
-                    onClick={handleCloseDetails}
+                    onClick={() => {
+                      setViewMode('list');
+                      setSelectedRequest(null);
+                      setEditingWeights({});
+                      fetchRequests();
+                    }}
                     className="p-2 hover:bg-gray-100 rounded-lg"
+                    disabled={updateLoading}
                   >
                     <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                     </svg>
                   </button>
                   <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Request Details: {selectedRequest.id}</h1>
-                    <p className="text-gray-600">Review photos and estimate weights</p>
+                    <h1 className="text-2xl font-bold text-gray-900">
+                      {selectedRequest.request_number}
+                    </h1>
+                    <p className="text-gray-600">Review and manage scrap collection request</p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
                   <span className={`px-4 py-2 rounded-full text-sm font-medium ${getStatusColor(selectedRequest.status)}`}>
-                    Status: {selectedRequest.status.charAt(0).toUpperCase() + selectedRequest.status.slice(1)}
+                    {formatStatus(selectedRequest.status)}
                   </span>
-                  {selectedRequest.status === 'submitted' && (
-                    <button
-                      onClick={() => {
-                        handleStatusUpdate(selectedRequest.id, 'estimated');
-                        setSelectedRequest({...selectedRequest, status: 'estimated'});
-                      }}
-                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                    >
-                      Mark as Estimated
-                    </button>
-                  )}
-                  {selectedRequest.status === 'estimated' && (
-                    <button
-                      onClick={() => {
-                        handleStatusUpdate(selectedRequest.id, 'completed');
-                        setSelectedRequest({...selectedRequest, status: 'completed'});
-                      }}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                      Mark as Completed
-                    </button>
+                  {selectedRequest.status === 'pending' && (
+                    <>
+                      <button
+                        onClick={async () => {
+                          if (await updateRequestStatus(selectedRequest.id, 'accepted')) {
+                            alert('Request accepted successfully');
+                          }
+                        }}
+                        disabled={updateLoading}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                      >
+                        {updateLoading ? 'Processing...' : 'Accept Request'}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const reason = prompt('Enter rejection reason:');
+                          if (reason && await updateRequestStatus(selectedRequest.id, 'rejected', reason)) {
+                            alert('Request rejected successfully');
+                          }
+                        }}
+                        disabled={updateLoading}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                      >
+                        {updateLoading ? 'Processing...' : 'Reject Request'}
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
+
+              {/* Error Display */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+                  {error}
+                  <button 
+                    onClick={() => setError(null)}
+                    className="float-right text-red-700 hover:text-red-900"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
 
               {/* Main Content Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left Column - User Info & Timeline */}
                 <div className="lg:col-span-1 space-y-6">
-                  {/* User Information Card */}
+                  {/* Request Information Card */}
                   <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">User Information</h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center">
-                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center mr-3">
-                          <span className="font-medium text-gray-700">
-                            {selectedRequest.userName.charAt(0)}
-                          </span>
-                        </div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Request Information</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm text-gray-600">User ID</p>
+                        <p className="font-medium text-gray-900">{selectedRequest.user_id}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Address ID</p>
+                        <p className="font-medium text-gray-900">{selectedRequest.address_id}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Request Date</p>
+                        <p className="font-medium text-gray-900">
+                          {formatDate(selectedRequest.createdAt || selectedRequest.created_at)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Pickup Date</p>
+                        <p className="font-medium text-gray-900">
+                          {selectedRequest.pickup_date || 'Not scheduled'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Time Slot</p>
+                        <p className="font-medium text-gray-900">
+                          {selectedRequest.pickup_time_slot || 'Not specified'}
+                        </p>
+                      </div>
+                      {selectedRequest.rejection_reason && (
                         <div>
-                          <p className="font-medium text-gray-900">{selectedRequest.userName}</p>
-                          <p className="text-sm text-gray-600">{selectedRequest.userEmail}</p>
+                          <p className="text-sm text-gray-600">Rejection Reason</p>
+                          <p className="font-medium text-red-600">
+                            {selectedRequest.rejection_reason}
+                          </p>
                         </div>
-                      </div>
-                      <div className="pt-3 border-t border-gray-200">
-                        <div className="text-sm">
-                          <p className="text-gray-600">Phone Number</p>
-                          <p className="font-medium text-gray-900">{selectedRequest.userPhone}</p>
-                        </div>
-                        <div className="text-sm mt-2">
-                          <p className="text-gray-600">User ID</p>
-                          <p className="font-medium text-gray-900">{selectedRequest.userId}</p>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </div>
 
@@ -411,14 +673,23 @@ const ScrapRequests = () => {
                   <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Pickup Address</h3>
                     <div className="space-y-3">
-                      <p className="text-gray-700">{selectedRequest.address}</p>
-                      <div className="flex items-center text-sm text-gray-600">
-                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <span>GPS: {selectedRequest.coordinates.lat.toFixed(4)}, {selectedRequest.coordinates.lng.toFixed(4)}</span>
-                      </div>
+                      <p className="text-gray-700">{selectedRequest.UserAddress?.address_line1 || 'No address'}</p>
+                      {selectedRequest.UserAddress?.address_line2 && (
+                        <p className="text-gray-700">{selectedRequest.UserAddress.address_line2}</p>
+                      )}
+                      <p className="text-gray-700">
+                        {selectedRequest.UserAddress?.city || ''}, {selectedRequest.UserAddress?.state || ''} {selectedRequest.UserAddress?.pincode || ''}
+                      </p>
+                      {selectedRequest.UserAddress?.landmark && (
+                        <p className="text-sm text-gray-600">
+                          Landmark: {selectedRequest.UserAddress.landmark}
+                        </p>
+                      )}
+                      {selectedRequest.UserAddress?.country && (
+                        <p className="text-sm text-gray-600">
+                          Country: {selectedRequest.UserAddress.country}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -427,30 +698,74 @@ const ScrapRequests = () => {
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Request Timeline</h3>
                     <div className="space-y-4">
                       <div className="flex items-start">
-                        <div className={`w-3 h-3 rounded-full mt-1 ${selectedRequest.status === 'completed' || selectedRequest.status === 'estimated' || selectedRequest.status === 'submitted' ? 'bg-green-500' : 'bg-gray-300'}`}></div>
+                        <div className="w-3 h-3 rounded-full mt-1 bg-green-500"></div>
                         <div className="ml-4">
                           <p className="font-medium text-gray-900">Submitted</p>
-                          <p className="text-sm text-gray-600">{selectedRequest.submittedAt}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start">
-                        <div className={`w-3 h-3 rounded-full mt-1 ${selectedRequest.status === 'completed' || selectedRequest.status === 'estimated' ? 'bg-purple-500' : 'bg-gray-300'}`}></div>
-                        <div className="ml-4">
-                          <p className="font-medium text-gray-900">Estimated</p>
                           <p className="text-sm text-gray-600">
-                            {selectedRequest.estimatedAt || 'Pending estimation'}
+                            {formatDate(selectedRequest.createdAt || selectedRequest.created_at)}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-start">
-                        <div className={`w-3 h-3 rounded-full mt-1 ${selectedRequest.status === 'completed' ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                        <div className="ml-4">
-                          <p className="font-medium text-gray-900">Completed</p>
-                          <p className="text-sm text-gray-600">
-                            {selectedRequest.completedAt || 'Not completed yet'}
-                          </p>
+                      {selectedRequest.accepted_at && (
+                        <div className="flex items-start">
+                          <div className="w-3 h-3 rounded-full mt-1 bg-blue-500"></div>
+                          <div className="ml-4">
+                            <p className="font-medium text-gray-900">Accepted</p>
+                            <p className="text-sm text-gray-600">
+                              {formatDate(selectedRequest.accepted_at)}
+                            </p>
+                          </div>
                         </div>
-                      </div>
+                      )}
+                      {selectedRequest.scheduled_pickup_time && (
+                        <div className="flex items-start">
+                          <div className="w-3 h-3 rounded-full mt-1 bg-purple-500"></div>
+                          <div className="ml-4">
+                            <p className="font-medium text-gray-900">Scheduled</p>
+                            <p className="text-sm text-gray-600">
+                              {formatDate(selectedRequest.scheduled_pickup_time)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {selectedRequest.actual_pickup_time && (
+                        <div className="flex items-start">
+                          <div className="w-3 h-3 rounded-full mt-1 bg-blue-500"></div>
+                          <div className="ml-4">
+                            <p className="font-medium text-gray-900">Picked Up</p>
+                            <p className="text-sm text-gray-600">
+                              {formatDate(selectedRequest.actual_pickup_time)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {selectedRequest.completed_at && (
+                        <div className="flex items-start">
+                          <div className="w-3 h-3 rounded-full mt-1 bg-green-500"></div>
+                          <div className="ml-4">
+                            <p className="font-medium text-gray-900">Completed</p>
+                            <p className="text-sm text-gray-600">
+                              {formatDate(selectedRequest.completed_at)}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      {selectedRequest.rejected_at && (
+                        <div className="flex items-start">
+                          <div className="w-3 h-3 rounded-full mt-1 bg-red-500"></div>
+                          <div className="ml-4">
+                            <p className="font-medium text-gray-900">Rejected</p>
+                            <p className="text-sm text-gray-600">
+                              {formatDate(selectedRequest.rejected_at)}
+                            </p>
+                            {selectedRequest.rejection_reason && (
+                              <p className="text-sm text-red-600 mt-1">
+                                Reason: {selectedRequest.rejection_reason}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -466,61 +781,107 @@ const ScrapRequests = () => {
                       </span>
                     </h3>
                     <div className="space-y-4">
-                      {selectedRequest.categories.map((category, idx) => (
+                      {selectedRequest.RequestItems?.map((item, idx) => (
                         <div key={idx} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex justify-between items-center mb-3">
-                            <div className="flex items-center">
-                              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center mr-3">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex items-start">
+                              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center mr-3 mt-1">
                                 <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                               </div>
                               <div>
-                                <h4 className="font-medium text-gray-900">{category.name}</h4>
-                                <p className="text-sm text-gray-600">{category.photos.length} photo(s) uploaded</p>
+                                <h4 className="font-medium text-gray-900">{item.Category?.name || 'Uncategorized'}</h4>
+                                <p className="text-sm text-gray-600">
+                                  Quantity: {item.quantity} | 
+                                  {item.RequestImages?.length || 0} photo(s) uploaded
+                                </p>
+                                {item.description && (
+                                  <p className="text-sm text-gray-600 mt-1">{item.description}</p>
+                                )}
                               </div>
                             </div>
                             <div className="text-right">
-                              <div className="text-sm text-gray-600">Estimated Weight</div>
-                              <div className="flex items-center">
-                                <input
-                                  type="text"
-                                  value={category.weight}
-                                  onChange={(e) => handleWeightUpdate(selectedRequest.id, category.id, e.target.value)}
-                                  className="w-24 px-3 py-1 border border-gray-300 rounded text-right font-medium text-gray-900"
-                                  placeholder="0.0 kg"
-                                />
+                              <div className="text-sm text-gray-600 mb-1">Current Weight</div>
+                              <div className="font-medium text-gray-900">
+                                {item.weight || '0'} kg
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                ₹{item.estimated_value || '0'}
                               </div>
                             </div>
                           </div>
                           
-                          {/* Photo Grid */}
-                          <div className="mt-4">
-                            <p className="text-sm font-medium text-gray-900 mb-2">Uploaded Photos:</p>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                              {category.photos.map((photo, photoIdx) => (
-                                <div key={photoIdx} className="aspect-square rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
-                                  <div className="w-full h-full flex items-center justify-center">
-                                    <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                  </div>
-                                </div>
-                              ))}
+                          {/* Admin Input Fields */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Estimated Weight (kg)
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={editingWeights[item.id]?.weight || item.weight || ''}
+                                onChange={(e) => handleWeightChange(item.id, 'weight', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#017B83] focus:border-transparent"
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Estimated Value (₹)
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={editingWeights[item.id]?.estimated_value || item.estimated_value || ''}
+                                onChange={(e) => handleWeightChange(item.id, 'estimated_value', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#017B83] focus:border-transparent"
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Admin Notes
+                              </label>
+                              <input
+                                type="text"
+                                value={editingWeights[item.id]?.admin_notes || item.admin_notes || ''}
+                                onChange={(e) => handleWeightChange(item.id, 'admin_notes', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#017B83] focus:border-transparent"
+                                placeholder="Add notes..."
+                              />
                             </div>
                           </div>
 
-                          {/* Review Notes */}
-                          <div className="mt-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Admin Notes for {category.name}
-                            </label>
-                            <textarea
-                              rows="2"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#017B83] focus:border-transparent"
-                              placeholder="Add notes about scrap condition, type, quantity..."
-                            />
-                          </div>
+                          {/* Photo Grid */}
+                          {item.RequestImages && item.RequestImages.length > 0 && (
+                            <div className="mt-4">
+                              <p className="text-sm font-medium text-gray-900 mb-2">Uploaded Photos:</p>
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                {item.RequestImages.map((image, imageIdx) => (
+                                  <div key={imageIdx} className="aspect-square rounded-lg overflow-hidden border border-gray-200 relative">
+                                    <img
+                                      src={`http://localhost:5001${image.image_url}`}
+                                      alt={`Scrap item ${idx + 1}`}
+                                      className="w-full h-full object-cover hover:scale-105 transition-transform"
+                                      onError={(e) => {
+                                        e.target.onerror = null;
+                                        e.target.src = 'https://via.placeholder.com/300x300?text=Image+Not+Found';
+                                      }}
+                                    />
+                                    {image.is_primary && (
+                                      <span className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                                        Primary
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
 
@@ -528,13 +889,15 @@ const ScrapRequests = () => {
                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <div className="flex justify-between items-center">
                           <div>
-                            <p className="font-medium text-gray-900">Total Estimated Weight</p>
+                            <p className="font-medium text-gray-900">Total Estimated Weight & Value</p>
                             <p className="text-sm text-gray-600">Sum of all category weights</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-2xl font-bold text-gray-900">{selectedRequest.totalWeight}</p>
-                            <p className="text-sm text-gray-600">
-                              {selectedRequest.categories.length} categor{selectedRequest.categories.length === 1 ? 'y' : 'ies'}
+                            <p className="text-2xl font-bold text-gray-900">
+                              {calculateTotals().weight.toFixed(2)} kg
+                            </p>
+                            <p className="text-lg font-medium text-gray-700">
+                              ₹{calculateTotals().value.toFixed(2)}
                             </p>
                           </div>
                         </div>
@@ -542,27 +905,98 @@ const ScrapRequests = () => {
                     </div>
                   </div>
 
+                  {/* Additional Notes */}
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          User Notes
+                        </label>
+                        <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">
+                          {selectedRequest.notes || 'No additional notes provided by user'}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Admin Notes (Optional)
+                        </label>
+                        <textarea
+                          rows="3"
+                          value={selectedRequest.admin_notes || ''}
+                          onChange={(e) => {
+                            setSelectedRequest(prev => ({
+                              ...prev,
+                              admin_notes: e.target.value
+                            }));
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#017B83] focus:border-transparent"
+                          placeholder="Add admin notes here..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Action Buttons */}
                   <div className="flex justify-end space-x-3">
                     <button
-                      onClick={handleCloseDetails}
-                      className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                      onClick={() => {
+                        setViewMode('list');
+                        setSelectedRequest(null);
+                        setEditingWeights({});
+                        fetchRequests();
+                      }}
+                      disabled={updateLoading}
+                      className="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
                     >
                       Back to List
                     </button>
-                    {selectedRequest.status !== 'completed' && (
+                    {Object.keys(editingWeights).length > 0 && (
                       <button
-                        onClick={() => {
-                          if (selectedRequest.status === 'submitted') {
-                            handleStatusUpdate(selectedRequest.id, 'estimated');
-                          } else if (selectedRequest.status === 'estimated') {
-                            handleStatusUpdate(selectedRequest.id, 'completed');
-                          }
-                          handleCloseDetails();
-                        }}
-                        className="px-6 py-3 bg-[#017B83] text-white rounded-lg hover:bg-teal-700 transition-colors"
+                        onClick={updateItemWeights}
+                        disabled={updateLoading}
+                        className="px-6 py-3 bg-[#017B83] text-white rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50"
                       >
-                        {selectedRequest.status === 'submitted' ? 'Save & Mark Estimated' : 'Save & Mark Completed'}
+                        {updateLoading ? 'Saving...' : 'Save Weight Updates'}
+                      </button>
+                    )}
+                    {selectedRequest.status === 'accepted' && (
+                      <button
+                        onClick={async () => {
+                          if (await updateRequestStatus(selectedRequest.id, 'scheduled')) {
+                            alert('Request marked as scheduled');
+                          }
+                        }}
+                        disabled={updateLoading}
+                        className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                      >
+                        {updateLoading ? 'Processing...' : 'Mark as Scheduled'}
+                      </button>
+                    )}
+                    {selectedRequest.status === 'scheduled' && (
+                      <button
+                        onClick={async () => {
+                          if (await updateRequestStatus(selectedRequest.id, 'in_progress')) {
+                            alert('Request marked as in progress');
+                          }
+                        }}
+                        disabled={updateLoading}
+                        className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                      >
+                        {updateLoading ? 'Processing...' : 'Mark as In Progress'}
+                      </button>
+                    )}
+                    {selectedRequest.status === 'in_progress' && (
+                      <button
+                        onClick={async () => {
+                          if (await updateRequestStatus(selectedRequest.id, 'completed')) {
+                            alert('Request marked as completed');
+                          }
+                        }}
+                        disabled={updateLoading}
+                        className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                      >
+                        {updateLoading ? 'Processing...' : 'Mark as Completed'}
                       </button>
                     )}
                   </div>
