@@ -43,72 +43,79 @@ const CategoryManagement = () => {
     fetchCategories();
   }, []);
 
-  // Function to normalize image URL (remove duplicate /uploads/)
-  const normalizeImageUrl = (url) => {
+  // Function to fix URL issues - MAIN FIX
+  const fixImageUrl = (url) => {
     if (!url) return null;
     
-    // If it's already a full URL, check for duplicate /uploads/
-    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:')) {
-      // Check for double /uploads//uploads/ pattern
-      const doubleUploadsPattern = /\/uploads\/\/uploads\//;
-      if (doubleUploadsPattern.test(url)) {
-        // Remove the duplicate /uploads/
-        return url.replace('/uploads//uploads/', '/uploads/');
+    console.log('Original URL:', url);
+    
+    // If it's already a full URL, fix the protocol and remove duplicate slashes
+    if (url.startsWith('http') || url.startsWith('//')) {
+      // Fix missing colon in protocol (http:/ -> http://)
+      let fixedUrl = url.replace(/^http:\//, 'http://').replace(/^https:\//, 'https://');
+      
+      // Remove duplicate slashes after protocol
+      fixedUrl = fixedUrl.replace(/(https?:\/\/)\/+/g, '$1');
+      
+      // Remove duplicate /uploads//uploads/ patterns
+      fixedUrl = fixedUrl.replace(/\/uploads\/\/uploads\//g, '/uploads/');
+      
+      // Remove duplicate /uploads/ anywhere in the path
+      fixedUrl = fixedUrl.replace(/\/uploads\/\/uploads/g, '/uploads');
+      
+      console.log('Fixed URL:', fixedUrl);
+      return fixedUrl;
+    }
+    
+    // For relative URLs, ensure proper format
+    if (url.includes('uploads')) {
+      // Remove leading slashes to make it relative
+      let relativeUrl = url.replace(/^\/+/, '');
+      
+      // Ensure it starts with 'uploads/'
+      if (!relativeUrl.startsWith('uploads/')) {
+        relativeUrl = 'uploads/' + relativeUrl.replace(/^\/?uploads\//, '');
       }
       
-      // Check for other patterns with duplicate uploads
-      const uploadsIndex = url.indexOf('/uploads/');
-      if (uploadsIndex !== -1) {
-        const afterUploads = url.substring(uploadsIndex);
-        // Count occurrences of /uploads/
-        const uploadsCount = (afterUploads.match(/\/uploads\//g) || []).length;
-        if (uploadsCount > 1) {
-          // Keep only the first /uploads/
-          return url.substring(0, uploadsIndex) + '/uploads/' + 
-                 afterUploads.replace(/\/uploads\//g, '/').substring(9); // Remove extra /uploads/
-        }
-      }
-      return url;
+      // Remove any duplicate 'uploads' in the path
+      relativeUrl = relativeUrl.replace(/uploads\/\/?uploads\//g, 'uploads/');
+      
+      // Return as relative URL starting with '/'
+      return '/' + relativeUrl;
     }
     
-    // For relative URLs, ensure it starts with /uploads/ only once
-    if (url.includes('uploads/')) {
-      if (url.startsWith('/uploads/')) {
-        return url;
-      }
-      // Check for double uploads
-      const doubleMatch = url.match(/(\/?)uploads\/\/?uploads\//);
-      if (doubleMatch) {
-        return '/uploads/' + url.replace(/(\/?)uploads\/\/?uploads\//, '');
-      }
-      // Ensure it starts with /uploads/
-      return '/uploads/' + url.replace(/^\/?uploads\//, '');
-    }
-    
-    // Otherwise, prepend /uploads/
-    return `/uploads/${url}`;
+    // For simple filenames, prepend the uploads path
+    return `/uploads/category-icons/${url}`;
   };
 
   // Function to get preview URL for existing image
   const getPreviewUrl = (iconUrl) => {
     if (!iconUrl) return '';
     
-    // Normalize the URL first
-    const normalizedUrl = normalizeImageUrl(iconUrl);
+    // Fix the URL first
+    const fixedUrl = fixImageUrl(iconUrl);
     
-    // If it's already a full URL, return it
-    if (normalizedUrl.startsWith('http://') || normalizedUrl.startsWith('https://') || normalizedUrl.startsWith('blob:')) {
-      return normalizedUrl;
+    console.log('Getting preview:', { original: iconUrl, fixed: fixedUrl });
+    
+    // If it's already a full URL, return the fixed version
+    if (fixedUrl.startsWith('http://') || fixedUrl.startsWith('https://') || fixedUrl.startsWith('blob:')) {
+      return fixedUrl;
     }
     
     // If it's a relative URL, make it absolute
-    if (normalizedUrl.startsWith('/')) {
+    if (fixedUrl.startsWith('/')) {
       const baseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5001';
-      return `${baseUrl}${normalizedUrl}`;
+      // Ensure we don't get double slashes
+      const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+      const normalizedPath = fixedUrl.replace(/^\/+/, '');
+      
+      const fullUrl = `${normalizedBaseUrl}/${normalizedPath}`;
+      console.log('Constructed full URL:', fullUrl);
+      return fullUrl;
     }
     
     // Otherwise return as is
-    return normalizedUrl;
+    return fixedUrl;
   };
 
   const fetchCategories = async () => {
@@ -117,13 +124,21 @@ const CategoryManagement = () => {
       setError('');
       const response = await categoryService.getAllCategories();
       if (response.success) {
-        // Process categories with normalized icon URLs
+        // Process categories with fixed icon URLs
         const processedCategories = (response.data || []).map(category => {
+          const fixedIcon = category.icon ? fixImageUrl(category.icon) : null;
+          
+          console.log('Processing category:', {
+            id: category.id,
+            name: category.name,
+            originalIcon: category.icon,
+            fixedIcon: fixedIcon,
+            previewUrl: fixedIcon ? getPreviewUrl(fixedIcon) : null
+          });
+          
           return {
             ...category,
-            // Normalize icon URL to remove duplicate /uploads/
-            icon: category.icon ? normalizeImageUrl(category.icon) : null,
-            // Ensure is_active is boolean
+            icon: fixedIcon,
             is_active: Boolean(category.is_active)
           };
         });
@@ -141,8 +156,8 @@ const CategoryManagement = () => {
   };
 
   // Function to handle image loading errors
-  const handleImageError = (categoryId) => {
-    console.log(`Image failed to load for category ${categoryId}`);
+  const handleImageError = (categoryId, imageUrl) => {
+    console.error(`Image failed to load for category ${categoryId}:`, imageUrl);
     setFailedImages(prev => new Set([...prev, categoryId]));
   };
 
@@ -180,9 +195,10 @@ const CategoryManagement = () => {
         
         // Update the icon URL in state
         if (response.data) {
+          const fixedIcon = response.data.icon ? fixImageUrl(response.data.icon) : null;
           const updatedCategory = {
             ...response.data,
-            icon: response.data.icon ? normalizeImageUrl(response.data.icon) : null,
+            icon: fixedIcon,
             is_active: Boolean(response.data.is_active)
           };
           
@@ -208,11 +224,12 @@ const CategoryManagement = () => {
         const response = await categoryService.createCategory(categoryData);
         setSuccessMessage('Category created successfully!');
         
-        // Add new category with normalized icon URL
+        // Add new category with fixed icon URL
         if (response.data) {
+          const fixedIcon = response.data.icon ? fixImageUrl(response.data.icon) : null;
           const newCategory = {
             ...response.data,
-            icon: response.data.icon ? normalizeImageUrl(response.data.icon) : null,
+            icon: fixedIcon,
             is_active: Boolean(response.data.is_active)
           };
           setCategories([newCategory, ...categories]);
@@ -267,8 +284,9 @@ const CategoryManagement = () => {
     if (category.icon) {
       const previewUrl = getPreviewUrl(category.icon);
       console.log('Setting preview for edit:', { 
-        original: category.icon, 
-        preview: previewUrl 
+        categoryId: category.id,
+        originalIcon: category.icon, 
+        previewUrl: previewUrl 
       });
       setPreviewImage(previewUrl);
     } else {
@@ -392,7 +410,7 @@ const CategoryManagement = () => {
     });
   };
 
-  // Function to render category icon
+  // Function to render category icon - ENHANCED with better error handling
   const renderCategoryIcon = (category) => {
     const iconFailed = failedImages.has(category.id);
     
@@ -400,15 +418,20 @@ const CategoryManagement = () => {
       return fallbackIcon;
     }
     
+    // Get the actual URL to use
+    const imageUrl = getPreviewUrl(category.icon);
+    console.log(`Rendering icon for ${category.name}:`, imageUrl);
+    
     return (
       <img 
-        src={category.icon} 
+        src={imageUrl} 
         alt={category.name}
         className="w-8 h-8 object-contain"
-        onError={() => handleImageError(category.id)}
+        onError={() => handleImageError(category.id, imageUrl)}
         onLoad={() => {
           // If image loads successfully, remove from failed images
           if (failedImages.has(category.id)) {
+            console.log(`Image loaded successfully for category ${category.id}`);
             setFailedImages(prev => {
               const newSet = new Set(prev);
               newSet.delete(category.id);
@@ -444,6 +467,20 @@ const CategoryManagement = () => {
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
             </svg>
             <p className="text-sm text-red-700">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Debug info (remove in production) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs">
+          <div className="flex items-center">
+            <svg className="h-4 w-4 text-yellow-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <span className="font-medium">Debug Info:</span>
+            <span className="ml-2">Total Categories: {categories.length}</span>
+            <span className="ml-2">Failed Images: {failedImages.size}</span>
           </div>
         </div>
       )}
