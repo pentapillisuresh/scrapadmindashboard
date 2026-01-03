@@ -46,7 +46,7 @@ const ScrapRequests = () => {
       };
 
       const response = await adminService.getAllRequests(params);
-      
+
       // Handle the API response structure
       if (response && response.success) {
         const data = response.data || response;
@@ -55,8 +55,8 @@ const ScrapRequests = () => {
           page: data.pagination?.page || pagination.page,
           limit: data.pagination?.limit || pagination.limit,
           total: data.pagination?.total || data.requests?.length || 0,
-          totalPages: data.pagination?.totalPages || 
-                     Math.ceil((data.pagination?.total || data.requests?.length || 0) / (data.pagination?.limit || pagination.limit))
+          totalPages: data.pagination?.totalPages ||
+            Math.ceil((data.pagination?.total || data.requests?.length || 0) / (data.pagination?.limit || pagination.limit))
         });
       } else {
         setError(response?.message || 'Failed to fetch requests');
@@ -76,10 +76,10 @@ const ScrapRequests = () => {
     setError(null);
     try {
       // const response = await adminService.getRequestDetails(id);
-      
+
       // if (response && response.success) {
-        setSelectedRequest(request);
-        setViewMode('details');
+      setSelectedRequest(request);
+      setViewMode('details');
       // } else {
       //   setError(response?.message || 'Failed to fetch request details');
       // }
@@ -100,19 +100,19 @@ const ScrapRequests = () => {
         status,
         admin_notes: notes
       });
-      
+
       if (response && response.success) {
         const updatedRequest = response.data || response;
-        
+
         // Update local state
-        setRequests(prev => prev.map(req => 
+        setRequests(prev => prev.map(req =>
           req.id === requestId ? updatedRequest : req
         ));
-        
+
         if (selectedRequest?.id === requestId) {
           setSelectedRequest(updatedRequest);
         }
-        
+
         alert(`Request ${status} successfully`);
         return true;
       } else {
@@ -143,7 +143,7 @@ const ScrapRequests = () => {
       }));
 
       const response = await adminService.updateItemWeights(selectedRequest.id, { items });
-      
+
       if (response && response.success) {
         const updatedRequest = response.data || response;
         setSelectedRequest(updatedRequest);
@@ -189,10 +189,10 @@ const ScrapRequests = () => {
     const totals = selectedRequest.RequestItems.reduce((acc, item) => {
       const weight = editingWeights[item.id]?.weight || item.weight || 0;
       const value = editingWeights[item.id]?.estimated_value || item.estimated_value || 0;
-      
+
       acc.weight += parseFloat(weight) || 0;
       acc.value += parseFloat(value) || 0;
-      
+
       return acc;
     }, { weight: 0, value: 0 });
 
@@ -376,7 +376,7 @@ const ScrapRequests = () => {
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex justify-between items-center">
               <span>{error}</span>
-              <button 
+              <button
                 onClick={() => setError(null)}
                 className="text-red-700 hover:text-red-900 font-bold text-lg"
               >
@@ -523,17 +523,16 @@ const ScrapRequests = () => {
                   } else {
                     pageNum = pagination.page - 2 + i;
                   }
-                  
+
                   return (
                     <button
                       key={pageNum}
                       onClick={() => handlePageChange(pageNum)}
                       disabled={loading}
-                      className={`px-3 py-1 border rounded text-sm ${
-                        pagination.page === pageNum
+                      className={`px-3 py-1 border rounded text-sm ${pagination.page === pageNum
                           ? 'bg-[#017B83] text-white border-[#017B83]'
                           : 'border-gray-300 hover:bg-gray-50'
-                      } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       {pageNum}
                     </button>
@@ -616,7 +615,7 @@ const ScrapRequests = () => {
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
                   {error}
-                  <button 
+                  <button
                     onClick={() => setError(null)}
                     className="float-right text-red-700 hover:text-red-900"
                   >
@@ -794,7 +793,7 @@ const ScrapRequests = () => {
                               <div>
                                 <h4 className="font-medium text-gray-900">{item.Category?.name || 'Uncategorized'}</h4>
                                 <p className="text-sm text-gray-600">
-                                  Quantity: {item.quantity} | 
+                                  Quantity: {item.quantity} |
                                   {item.RequestImages?.length || 0} photo(s) uploaded
                                 </p>
                                 {item.description && (
@@ -812,7 +811,7 @@ const ScrapRequests = () => {
                               </div>
                             </div>
                           </div>
-                          
+
                           {/* Admin Input Fields */}
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                             <div>
@@ -862,27 +861,29 @@ const ScrapRequests = () => {
                             <div className="mt-4">
                               <p className="text-sm font-medium text-gray-900 mb-2">Uploaded Photos:</p>
                               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                {item.RequestImages.map((image, imageIdx) => 
-                                {
-                                  console.log("images:::",`http://localhost:5001${image.image_url}`)
-                                  return(
-                                  <div key={imageIdx} className="aspect-square rounded-lg overflow-hidden border border-gray-200 relative">
-                                    <img
-                                      src={`http://localhost:5001${image.image_url}`}
-                                      alt={`Scrap item ${idx + 1}`}
-                                      className="w-full h-full object-cover hover:scale-105 transition-transform"
-                                      onError={(e) => {
-                                        e.target.onerror = null;
-                                        e.target.src = 'https://via.placeholder.com/300x300?text=Image+Not+Found';
-                                      }}
-                                    />
-                                    {image.is_primary && (
-                                      <span className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
-                                        Primary
-                                      </span>
-                                    )}
-                                  </div>
-                                )})}
+                                {item.RequestImages.map((image, imageIdx) => {
+                                  console.log("images:::", `http://localhost:5001${image.image_url}`)
+                                  return (
+                                    <div key={imageIdx} className="aspect-square rounded-lg overflow-hidden border border-gray-200 relative">
+                                      <img
+                                        src={`http://localhost:5001${image.image_url}`}
+                                        alt={`Scrap item ${idx + 1}`}
+                                        className="w-full h-full object-cover hover:scale-105 transition-transform"
+                                        onError={(e) => {
+                                          e.currentTarget.onerror = null;
+                                          e.currentTarget.src =
+                                            "https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg";
+                                        }}
+                                      />
+
+                                      {image.is_primary && (
+                                        <span className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                                          Primary
+                                        </span>
+                                      )}
+                                    </div>
+                                  )
+                                })}
                               </div>
                             </div>
                           )}
