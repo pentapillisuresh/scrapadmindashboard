@@ -120,6 +120,11 @@ const ScrapRequests = () => {
     </div>
   );
 
+  // Function to check if user is admin
+  const isAdminUser = (user) => {
+    return user?.role === 'admin';
+  };
+
   // Fetch requests
   const fetchRequests = async () => {
     setLoading(true);
@@ -140,31 +145,33 @@ const ScrapRequests = () => {
       if (response && response.success) {
         const data = response.data || response;
         
-        // Process requests to fix image URLs
-        const processedRequests = (data.requests || []).map(request => {
-          if (request.RequestItems) {
-            return {
-              ...request,
-              RequestItems: request.RequestItems.map(item => ({
-                ...item,
-                RequestImages: (item.RequestImages || []).map(image => ({
-                  ...image,
-                  // Fix the image_url for display
-                  image_url: fixImageUrl(image.image_url)
+        // Process requests to fix image URLs and filter out admin users
+        const processedRequests = (data.requests || [])
+          .filter(request => !isAdminUser(request.User)) // Filter out admin users
+          .map(request => {
+            if (request.RequestItems) {
+              return {
+                ...request,
+                RequestItems: request.RequestItems.map(item => ({
+                  ...item,
+                  RequestImages: (item.RequestImages || []).map(image => ({
+                    ...image,
+                    // Fix the image_url for display
+                    image_url: fixImageUrl(image.image_url)
+                  }))
                 }))
-              }))
-            };
-          }
-          return request;
-        });
+              };
+            }
+            return request;
+          });
         
         setRequests(processedRequests);
         setPagination({
           page: data.pagination?.page || pagination.page,
           limit: data.pagination?.limit || pagination.limit,
-          total: data.pagination?.total || data.requests?.length || 0,
+          total: data.pagination?.total || processedRequests.length || 0,
           totalPages: data.pagination?.totalPages ||
-            Math.ceil((data.pagination?.total || data.requests?.length || 0) / (data.pagination?.limit || pagination.limit))
+            Math.ceil((data.pagination?.total || processedRequests.length || 0) / (data.pagination?.limit || pagination.limit))
         });
       } else {
         setError(response?.message || 'Failed to fetch requests');
@@ -542,7 +549,7 @@ const ScrapRequests = () => {
                   <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
                 <span className="font-medium">Debug Info:</span>
-                <span className="ml-2">Failed Images: {failedImages.size}</span>
+                <span className="ml-2">Showing {requests.length} non-admin requests</span>
               </div>
             </div>
           )}
@@ -557,7 +564,7 @@ const ScrapRequests = () => {
                       Request Number
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      User ID
+                      User Details
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Address
@@ -589,9 +596,14 @@ const ScrapRequests = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
-                          User ID: {request.user_id}
+                          {request.User?.full_name || 'N/A'}
                         </div>
-                        <div className="text-sm text-gray-500">Address ID: {request.address_id}</div>
+                        <div className="text-sm text-gray-600">
+                          {request.User?.phone || 'No phone'}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          User ID: {request.user_id} | Address ID: {request.address_id}
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-sm text-gray-900">
@@ -650,9 +662,9 @@ const ScrapRequests = () => {
                 <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No requests found</h3>
+                <h3 className="mt-2 text-sm font-medium text-gray-900">No user requests found</h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  {filters.search || filters.status !== 'all' ? 'Try adjusting your filters' : 'No scrap requests have been submitted yet'}
+                  {filters.search || filters.status !== 'all' ? 'Try adjusting your filters' : 'No scrap requests have been submitted by regular users yet'}
                 </p>
               </div>
             )}
@@ -808,17 +820,31 @@ const ScrapRequests = () => {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left Column - User Info & Timeline */}
                 <div className="lg:col-span-1 space-y-6">
-                  {/* Request Information Card */}
+                  {/* User Information Card - UPDATED SECTION */}
                   <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Request Information</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">User Information</h3>
                     <div className="space-y-4">
+                      <div>
+                        <p className="text-sm text-gray-600">Full Name</p>
+                        <p className="font-medium text-gray-900">
+                          {selectedRequest.User?.full_name || 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Phone Number</p>
+                        <p className="font-medium text-gray-900">
+                          {selectedRequest.User?.phone || 'No phone number'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Email</p>
+                        <p className="font-medium text-gray-900">
+                          {selectedRequest.User?.email || 'No email'}
+                        </p>
+                      </div>
                       <div>
                         <p className="text-sm text-gray-600">User ID</p>
                         <p className="font-medium text-gray-900">{selectedRequest.user_id}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-600">Address ID</p>
-                        <p className="font-medium text-gray-900">{selectedRequest.address_id}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-600">Request Date</p>
