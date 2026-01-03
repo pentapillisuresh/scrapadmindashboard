@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { adminService } from '../services/api';
 
 const ScrapRequests = () => {
@@ -22,6 +22,7 @@ const ScrapRequests = () => {
   const [editingWeights, setEditingWeights] = useState({});
   const [updateLoading, setUpdateLoading] = useState(false);
   const [userData, setUserData] = useState(null);
+  const [failedImages, setFailedImages] = useState(new Set());
 
   // Fetch user data from localStorage on mount
   useEffect(() => {
@@ -30,6 +31,94 @@ const ScrapRequests = () => {
       setUserData(JSON.parse(storedUserData));
     }
   }, []);
+
+  // Function to fix URL issues - Same as CategoryManagement
+  const fixImageUrl = useCallback((url) => {
+    if (!url) return null;
+    
+    console.log('Original URL:', url);
+    
+    // If it's already a full URL, fix the protocol and remove duplicate slashes
+    if (url.startsWith('http') || url.startsWith('//')) {
+      // Fix missing colon in protocol (http:/ -> http://)
+      let fixedUrl = url.replace(/^http:\//, 'http://').replace(/^https:\//, 'https://');
+      
+      // Remove duplicate slashes after protocol
+      fixedUrl = fixedUrl.replace(/(https?:\/\/)\/+/g, '$1');
+      
+      // Remove duplicate /uploads//uploads/ patterns
+      fixedUrl = fixedUrl.replace(/\/uploads\/\/uploads\//g, '/uploads/');
+      
+      // Remove duplicate /uploads/ anywhere in the path
+      fixedUrl = fixedUrl.replace(/\/uploads\/\/uploads/g, '/uploads');
+      
+      console.log('Fixed URL:', fixedUrl);
+      return fixedUrl;
+    }
+    
+    // For relative URLs, ensure proper format
+    if (url.includes('uploads')) {
+      // Remove leading slashes to make it relative
+      let relativeUrl = url.replace(/^\/+/, '');
+      
+      // Ensure it starts with 'uploads/'
+      if (!relativeUrl.startsWith('uploads/')) {
+        relativeUrl = 'uploads/' + relativeUrl.replace(/^\/?uploads\//, '');
+      }
+      
+      // Remove any duplicate 'uploads' in the path
+      relativeUrl = relativeUrl.replace(/uploads\/\/?uploads\//g, 'uploads/');
+      
+      // Return as relative URL starting with '/'
+      return '/' + relativeUrl;
+    }
+    
+    // For simple filenames, prepend the uploads path
+    return `/uploads/${url}`;
+  }, []);
+
+  // Function to get preview URL for existing image
+  const getPreviewUrl = useCallback((imageUrl) => {
+    if (!imageUrl) return '';
+    
+    // Fix the URL first
+    const fixedUrl = fixImageUrl(imageUrl);
+    
+    console.log('Getting preview for scrap image:', { original: imageUrl, fixed: fixedUrl });
+    
+    // If it's already a full URL, return the fixed version
+    if (fixedUrl.startsWith('http://') || fixedUrl.startsWith('https://') || fixedUrl.startsWith('blob:')) {
+      return fixedUrl;
+    }
+    
+    // If it's a relative URL, make it absolute
+    if (fixedUrl.startsWith('/')) {
+      const baseUrl = window.location.origin || 'http://localhost:5001';
+      // Ensure we don't get double slashes
+      const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+      const normalizedPath = fixedUrl.replace(/^\/+/, '');
+      
+      const fullUrl = `${normalizedBaseUrl}/${normalizedPath}`;
+      console.log('Constructed full URL for scrap image:', fullUrl);
+      return fullUrl;
+    }
+    
+    // Otherwise return as is
+    return fixedUrl;
+  }, [fixImageUrl]);
+
+  // Function to handle image loading errors
+  const handleImageError = useCallback((imageId, imageUrl) => {
+    console.error(`Image failed to load:`, imageUrl);
+    setFailedImages(prev => new Set([...prev, imageId]));
+  }, []);
+
+  // Fallback image component
+  const FallbackImage = ({ className }) => (
+    <div className={`${className} flex items-center justify-center bg-gray-200 rounded`}>
+      <span className="text-gray-600 text-xs font-semibold">IMAGE</span>
+    </div>
+  );
 
   // Fetch requests
   const fetchRequests = async () => {
@@ -50,7 +139,26 @@ const ScrapRequests = () => {
       // Handle the API response structure
       if (response && response.success) {
         const data = response.data || response;
-        setRequests(data.requests || []);
+        
+        // Process requests to fix image URLs
+        const processedRequests = (data.requests || []).map(request => {
+          if (request.RequestItems) {
+            return {
+              ...request,
+              RequestItems: request.RequestItems.map(item => ({
+                ...item,
+                RequestImages: (item.RequestImages || []).map(image => ({
+                  ...image,
+                  // Fix the image_url for display
+                  image_url: fixImageUrl(image.image_url)
+                }))
+              }))
+            };
+          }
+          return request;
+        });
+        
+        setRequests(processedRequests);
         setPagination({
           page: data.pagination?.page || pagination.page,
           limit: data.pagination?.limit || pagination.limit,
@@ -71,18 +179,23 @@ const ScrapRequests = () => {
 
   // Fetch request details
   const fetchRequestDetails = async (request) => {
-
     setLoading(true);
     setError(null);
     try {
-      // const response = await adminService.getRequestDetails(id);
-
-      // if (response && response.success) {
-      setSelectedRequest(request);
+      // Process the request to fix image URLs before setting it as selected
+      const processedRequest = {
+        ...request,
+        RequestItems: (request.RequestItems || []).map(item => ({
+          ...item,
+          RequestImages: (item.RequestImages || []).map(image => ({
+            ...image,
+            image_url: fixImageUrl(image.image_url)
+          }))
+        }))
+      };
+      
+      setSelectedRequest(processedRequest);
       setViewMode('details');
-      // } else {
-      //   setError(response?.message || 'Failed to fetch request details');
-      // }
     } catch (err) {
       setError(err.message || err.response?.data?.message || 'Failed to fetch request details');
       console.error('Fetch request details error:', err);
@@ -271,6 +384,42 @@ const ScrapRequests = () => {
     }
   };
 
+  // Function to render scrap images with error handling
+  const renderScrapImage = (image, imageIdx, itemId) => {
+    const imageId = `${itemId}-${imageIdx}`;
+    const imageFailed = failedImages.has(imageId);
+    
+    if (imageFailed || !image.image_url) {
+      return <FallbackImage className="w-full h-full" />;
+    }
+    
+    // Get the actual URL to use
+    const imageUrl = getPreviewUrl(image.image_url);
+    console.log(`Rendering scrap image ${imageIdx} for item ${itemId}:`, imageUrl);
+    
+    return (
+      <img
+         src={`http://localhost:5001${image.image_url}`}
+        alt={`Scrap item ${itemId} - ${imageIdx + 1}`}
+        className="w-full h-full object-cover hover:scale-105 transition-transform"
+        onError={() => handleImageError(imageId, imageUrl)}
+        onLoad={() => {
+          // If image loads successfully, remove from failed images
+          if (failedImages.has(imageId)) {
+            console.log(`Image loaded successfully for scrap item ${itemId}`);
+            setFailedImages(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(imageId);
+              return newSet;
+            });
+          }
+        }}
+        loading="lazy"
+        crossOrigin="anonymous"
+      />
+    );
+  };
+
   if (loading && viewMode === 'list' && requests.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -382,6 +531,19 @@ const ScrapRequests = () => {
               >
                 ×
               </button>
+            </div>
+          )}
+
+          {/* Debug info for development */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs">
+              <div className="flex items-center">
+                <svg className="h-4 w-4 text-yellow-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <span className="font-medium">Debug Info:</span>
+                <span className="ml-2">Failed Images: {failedImages.size}</span>
+              </div>
             </div>
           )}
 
@@ -624,6 +786,24 @@ const ScrapRequests = () => {
                 </div>
               )}
 
+              {/* Debug info for development */}
+              {process.env.NODE_ENV === 'development' && selectedRequest?.RequestItems && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs">
+                  <div className="flex items-center">
+                    <svg className="h-4 w-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
+                    </svg>
+                    <span className="font-medium">Image Debug:</span>
+                    <span className="ml-2">Total Items: {selectedRequest.RequestItems.length}</span>
+                    {selectedRequest.RequestItems.map((item, idx) => (
+                      <span key={idx} className="ml-2">
+                        Item {idx + 1}: {item.RequestImages?.length || 0} images
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Main Content Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left Column - User Info & Timeline */}
@@ -861,29 +1041,26 @@ const ScrapRequests = () => {
                             <div className="mt-4">
                               <p className="text-sm font-medium text-gray-900 mb-2">Uploaded Photos:</p>
                               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                {item.RequestImages.map((image, imageIdx) => {
-                                  console.log("images:::", `http://localhost:5001${image.image_url}`)
-                                  return (
-                                    <div key={imageIdx} className="aspect-square rounded-lg overflow-hidden border border-gray-200 relative">
-                                      <img
-                                        src={`http://localhost:5001${image.image_url}`}
-                                        alt={`Scrap item ${idx + 1}`}
-                                        className="w-full h-full object-cover hover:scale-105 transition-transform"
-                                        onError={(e) => {
-                                          e.currentTarget.onerror = null;
-                                          e.currentTarget.src =
-                                            "https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg";
-                                        }}
-                                      />
-
-                                      {image.is_primary && (
-                                        <span className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
-                                          Primary
-                                        </span>
-                                      )}
+                                {item.RequestImages.map((image, imageIdx) => (
+                                  <div key={imageIdx} className="aspect-square rounded-lg overflow-hidden border border-gray-200 relative group">
+                                    <div className="w-full h-full">
+                                      {renderScrapImage(image, imageIdx, item.id)}
                                     </div>
-                                  )
-                                })}
+                                    {image.is_primary && (
+                                      <span className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                                        Primary
+                                      </span>
+                                    )}
+                                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                      <button
+                                        onClick={() => window.open(getPreviewUrl(image.image_url), '_blank')}
+                                        className="bg-white text-gray-800 px-3 py-1 rounded text-sm font-medium hover:bg-gray-100 transition-colors"
+                                      >
+                                        View Full Size
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           )}
