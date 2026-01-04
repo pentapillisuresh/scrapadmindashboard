@@ -19,7 +19,7 @@ const Dashboard = ({ user, onLogout }) => {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardHome />;
+        return <DashboardHome setActiveTab={setActiveTab} />;
       case 'requests':
         return <ScrapRequests />;
       case 'categories':

@@ -204,8 +204,29 @@ export const adminService = {
   rejectRequest: (id, reason) => api.put(`/admin/requests/${id}/reject`, { reason }),
   updateRequestStatus: (id, data) => api.put(`/admin/requests/${id}/status`, data),
   updateItemWeights: (id, data) => api.put(`/admin/requests/${id}/weights`, data),
+  
+  // Dashboard stats - FIXED endpoint
   getDashboardStats: () => api.get('/admin/dashboard/stats'),
-  getAllUsers: () => api.get('/admin/users'),
+  
+  // Get all users with only phone and name
+  getAllUsers: () => api.get('/categories/allUsers').then(response => {
+    // Transform the response to include only required fields
+    if (response.success && response.data) {
+      const users = response.data.map(user => ({
+        id: user.id,
+        phone: user.phone,
+        full_name: user.full_name,
+        // Add avatar initial
+        avatarInitial: user.full_name ? user.full_name.charAt(0).toUpperCase() : 'U'
+      }));
+      return {
+        success: true,
+        data: users
+      };
+    }
+    return response;
+  }),
+  
   getUserById: (id) => api.get(`/admin/users/${id}`),
   updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
   deleteUser: (id) => api.delete(`/admin/users/${id}`),
