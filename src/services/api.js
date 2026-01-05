@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // Use import.meta.env for Vite
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://scrapservice.vmrdaplots.in/api/v1';
 
 // Create axios instance
 const api = axios.create({
