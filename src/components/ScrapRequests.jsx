@@ -406,7 +406,7 @@ const ScrapRequests = () => {
     
     return (
       <img
-         src={`http://localhost:5001${image.image_url}`}
+         src={`https://scrapservice.vmrdaplots.in/api/v1${image.image_url}`}
         alt={`Scrap item ${itemId} - ${imageIdx + 1}`}
         className="w-full h-full object-cover hover:scale-105 transition-transform"
         onError={() => handleImageError(imageId, imageUrl)}
