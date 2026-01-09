@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import DashboardHome from './DashboardHome';
 import CategoryManagement from './CategoryManagement';
 import ScrapRequests from './ScrapRequests';
-import Profile from './Profile'; // Import the new Profile component
+import Profile from './Profile';
 
 const Dashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -13,7 +13,7 @@ const Dashboard = ({ user, onLogout }) => {
     { id: 'dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
     { id: 'requests', label: 'Scrap Requests', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2' },
     { id: 'categories', label: 'Category Management', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z' },
-    { id: 'profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' }, // Added profile icon
+    { id: 'profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
   ];
 
   const renderContent = () => {
@@ -25,7 +25,7 @@ const Dashboard = ({ user, onLogout }) => {
       case 'categories':
         return <CategoryManagement />;
       case 'profile':
-        return <Profile user={user} onLogout={onLogout} />; // Added profile case
+        return <Profile user={user} onLogout={onLogout} />;
       default:
         return <DashboardHome />;
     }
@@ -53,8 +53,9 @@ const Dashboard = ({ user, onLogout }) => {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-4">
-          <nav className="space-y-2 px-3">
+        {/* Navigation Menu - Fixed height to prevent vertical scrollbar */}
+        <div className="flex-1 py-4">
+          <nav className="space-y-2 px-3 h-full flex flex-col">
             {menuItems.map((item) => (
               <button
                 key={item.id}
@@ -64,32 +65,41 @@ const Dashboard = ({ user, onLogout }) => {
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
                 </svg>
-                {sidebarOpen && <span className="">{item.label}</span>}
+                {sidebarOpen && <span className="ml-3">{item.label}</span>}
               </button>
             ))}
-          </nav>
-        </div>
-
-        {/* User Profile */}
-        <div className="p-4 border-t border-teal-700">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-full bg-teal-600 flex items-center justify-center">
-              <span className="text-white font-semibold">
-                {user?.email?.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            {sidebarOpen && (
-              <div className="flex-1">
-                <p className="text-sm font-medium text-white">{user?.email}</p>
-                <button
-                  onClick={onLogout}
-                  className="text-sm text-teal-200 hover:text-white mt-1"
-                >
-                  Sign Out
-                </button>
+            
+            {/* Spacer to push logout button to bottom */}
+            <div className="flex-1"></div>
+            
+            {/* User Profile and Logout Section - Moved much higher */}
+            <div className="mt-auto pt-4 border-t border-teal-700">
+              <div className="flex items-center space-x-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-teal-600 flex items-center justify-center">
+                  <span className="text-white font-semibold">
+                    {user?.email?.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                {sidebarOpen && (
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-white truncate">{user?.email}</p>
+                    <p className="text-xs text-teal-200">Administrator</p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+              
+              {/* Logout Button - Moved much higher */}
+              {/* <button
+                onClick={onLogout}
+                className={`w-full flex items-center ${sidebarOpen ? 'justify-start px-4' : 'justify-center'} py-2.5 rounded-lg transition-colors bg-red-500 hover:bg-red-600 text-white mb-4`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                {sidebarOpen && <span className="ml-3 font-medium">Logout</span>}
+              </button> */}
+            </div>
+          </nav>
         </div>
       </div>
 
@@ -105,35 +115,66 @@ const Dashboard = ({ user, onLogout }) => {
               <p className="text-sm text-gray-600">Welcome back, {user?.email}</p>
             </div>
             <div className="flex items-center space-x-4">
+              {/* User Profile Button */}
               <button 
                 onClick={() => setActiveTab('profile')}
-                className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100"
+                className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <div className="w-8 h-8 rounded-full bg-[#017B83] flex items-center justify-center">
                   <span className="text-white font-semibold text-sm">
                     {user?.email?.charAt(0).toUpperCase()}
                   </span>
                 </div>
-                {sidebarOpen && (
-                  <span className="text-sm font-medium text-gray-700">Profile</span>
-                )}
+                <div className="text-left">
+                  <span className="text-sm font-medium text-gray-700 block">My Account</span>
+                  <span className="text-xs text-gray-500">View Profile</span>
+                </div>
               </button>
+              
+              {/* Notifications */}
               <div className="relative">
-                <button className="p-2 text-gray-600 hover:text-gray-900">
+                <button className="p-2 text-gray-600 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-colors">
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                   </svg>
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                  <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full"></span>
                 </button>
               </div>
+              
+              {/* Quick Logout in Top Bar */}
+              <button
+                onClick={onLogout}
+                className="hidden md:flex items-center space-x-2 px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors border border-red-200"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Logout</span>
+              </button>
             </div>
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
-          {renderContent()}
+        {/* Page Content - Removed vertical scrollbar */}
+        <main className="flex-1 overflow-hidden bg-gray-50">
+          <div className="h-full overflow-y-auto">
+            <div className="p-6">
+              {renderContent()}
+            </div>
+          </div>
         </main>
+        
+        {/* Footer */}
+        <footer className="bg-white border-t py-3 px-6">
+          <div className="flex items-center justify-between text-sm text-gray-600">
+            <span>© 2024 Scrap Management System</span>
+            <div className="flex items-center space-x-4">
+              <button className="hover:text-gray-900 transition-colors">Help</button>
+              <button className="hover:text-gray-900 transition-colors">Privacy</button>
+              <button className="hover:text-gray-900 transition-colors">Terms</button>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   );
