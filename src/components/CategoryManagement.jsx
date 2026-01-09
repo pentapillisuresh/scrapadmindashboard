@@ -111,7 +111,7 @@ const CategoryManagement = () => {
     setFormData({
       name: category.name,
       description: category.description || '',
-      is_active: Boolean(category.is_active)
+      is_active: true
     });
     setPreviewImage(category.icon || '');
     setUploadedImage(null);
