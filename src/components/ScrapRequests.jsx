@@ -53,7 +53,7 @@ const ScrapRequests = () => {
       import.meta.env.VITE_API_URL
         ?.replace('/api/v1', '')
         ?.replace('/api', '') ||
-      'https://scrapservice.vmrdaplots.in';
+      'https://service.scrapexpress.co.in';
 
     return `${BASE_URL}/${url.replace(/^\/+/, '')}`;
   }, []);
@@ -513,11 +513,10 @@ const ScrapRequests = () => {
                         <button
                           key={i}
                           onClick={() => setPagination({ ...pagination, page: pageNum })}
-                          className={`w-10 h-10 rounded-lg font-medium transition-colors ${
-                            pagination.page === pageNum
+                          className={`w-10 h-10 rounded-lg font-medium transition-colors ${pagination.page === pageNum
                               ? 'bg-[#017B83] text-white'
                               : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                          }`}
+                            }`}
                         >
                           {pageNum}
                         </button>
